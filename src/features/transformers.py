@@ -1,0 +1,1 @@
+# Custom transformers implementing engineered features (e.g., lag features, ratios, domain-driven encodings).
