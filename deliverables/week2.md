@@ -13,11 +13,7 @@
     - Correlation heatmaps, scatterplots, outlier checks.
     - Exploratory lag analysis (ACF/PACF, lag vs. target plots).
 
-- [x] notebooks/feature_selection.ipynb:
-    - Shows feature elimination decisions (variance threshold, correlation pruning, leakage checks).
-    - Logs results in a table (results/feature_selection.csv).
-
-- [ ] results/eda/ folder:
+- [x] results/eda/ folder:
     - Key plots saved as .png or .html.
 
 - [x] dataframe for demographics
@@ -27,6 +23,10 @@
     - Demonstrates the pipeline fitting/transforming data.
 
 ### both
+- [ ] notebooks/feature_selection.ipynb:
+    - Shows feature elimination decisions (variance threshold, correlation pruning, leakage checks).
+    - Logs results in a table (results/feature_selection.csv).
+    
 - [ ] src/features/transformers.py:
     - Custom transformers implementing engineered features (e.g., lag features, ratios, domain-driven encodings).
 
