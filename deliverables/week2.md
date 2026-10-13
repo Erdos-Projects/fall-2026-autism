@@ -1,3 +1,5 @@
+# Checkpoint 2 Guide: EDA, Feature Selection, and Feature Engineering
+
 - [x] A data audit summary: key distributional facts, missingness, correlations.
     - Missing data information can be found in `results/eda/missingness.txt`
     - Distributions are all unremarkable, except for the autism quotient distributions where there are ~5 outliers for control and autism groups.
@@ -18,7 +20,7 @@
 
 
 ## Deliverables
-> Jess:
+### Jess:
 - [x] notebooks/eda.ipynb:
     - Visualizations and descriptive stats.
     - Missingness analysis.
@@ -34,8 +36,8 @@
 - [ ] notebooks/pipeline_demo.ipynb:
     - Demonstrates the pipeline fitting/transforming data.
 
-### both
-- [ ] notebooks/feature_selection.ipynb:
+### Both:
+- [ ] (WIP) notebooks/feature_selection.ipynb:
     - Shows feature elimination decisions (variance threshold, correlation pruning, leakage checks).
     - Logs results in a table (results/feature_selection.csv).
 
