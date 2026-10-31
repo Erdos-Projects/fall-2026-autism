@@ -1,6 +1,25 @@
 # autismCNN
 Model identifying autism individuals by MRI and/or fMRI.
 
+## Data Download Instructions
+1. Go to this website https://ida.loni.usc.edu/login.jsp
+2. Log in (you can register no problem)
+3. Select the ABIDE study in the top left "Select Study" box
+4. Click on Download -> Image Collections
+5. Click the Search tab and select the following fields:
+    - Image Count = ALL
+    - Acquisition Plane = AXIAL
+6. Select all the results and add them to collection, "AXIAL"
+    - This will need to be done for each page. 
+    - After you go through all the pages, double check the number of results matches the counts in the proper Data Collections tab section on step 8.
+7. Click on the Data Collections tab
+8. Select My Collections -> AXIAL -> Not Downloaded
+9. Select all and click the "1-CLICK DOWNLOAD" button
+10. Download Zip File
+11. Repeat steps 5 - 10 for:
+    - Acquisition Plane = SAGITTAL; collection "SAGITTAL"
+    - Acquisition Plane = CORONAL; collection "CORONAL"
+
 ## Problem Definition
 > What decision or action will this analysis inform?
 
