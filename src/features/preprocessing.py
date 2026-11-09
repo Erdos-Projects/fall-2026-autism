@@ -1,5 +1,7 @@
 '''
     Main preprocessing pipeline that drops unused features, integrates engineered features, and can be reused in modeling.
+
+    Author: Jess Miears
 '''
 
 import csv
@@ -9,12 +11,33 @@ import torch
 import scipy.ndimage as ndi
 from scipy.signal import find_peaks
 import numpy as np
+import os
 from os.path import join
 
 
-unprocessed_data = pd.read_csv("data/data_inventory.csv")
-control = unprocessed_data[unprocessed_data["DX_GROUP"] == 2]
-autism = unprocessed_data[unprocessed_data["DX_GROUP"] == 1]
+# file locations
+proj_dir = os.environ.get("PROJECT_DIR")
+inventory_path = Path(f"{proj_dir}/data/data_inventory.csv")
+csv_file = f"{proj_dir}/data/manifest.csv"
+
+# remove incorrect values in patient data csv
+bad_value = "-9999"
+with open(inventory_path, newline="") as f:
+    rows = list(csv.reader(f))
+n_replaced = 0
+for row in rows:
+    for j, value in enumerate(row):
+        if value.strip() == bad_value:
+            row[j] = ""
+            n_replaced += 1
+with open(inventory_path, "w", newline="") as f:
+    csv.writer(f, lineterminator="\n").writerows(rows)
+print(f"Replaced {n_replaced} {bad_value} values with empty values in {inventory_path}.")
+
+# get data inventory and split into control and autism groups
+data = pd.read_csv(inventory_path)
+control = data[data["DX_GROUP"] == 2]
+autism = data[data["DX_GROUP"] == 1]
 
 
 def get_scan_file(subj_id: int, names: list) -> str:
@@ -61,43 +84,50 @@ def process_files(scan_type: str) -> dict:
 
         @return dictionary of ids and their grey matter and white matter tuples from find_matter
     '''
-    scan_dir = Path(f"data/scans/mri_{scan_type}")
-    all_ids = unprocessed_data["SUB_ID"].unique()
+    print(f"Processing {scan_type} files. This may take a while...")
+    scan_dir = Path(f"{proj_dir}/data/scans/mri_{scan_type}")
+    all_ids = data["SUB_ID"].unique()
     names = [p.name for p in scan_dir.iterdir() if p.is_file() and p.suffix == ".pt"]
-    ids = []
     grey = []
     white = []
     for id in all_ids:
         file = get_scan_file(id, names)
         if file is not None:
             matter = find_matter(join(scan_dir, file))
-            ids.append(id)
             grey.append(matter["grey"])
             white.append(matter["white"])
-    print(f"Processed {scan_type} files.")
-    return {"id" : ids, "grey" : grey, "white" : white}
+        else:
+            grey.append(None)
+            white.append(None)
+    return {"grey" : grey, "white" : white}
 
 
-# remove incorrect values in patient data csv
-inventory_path = Path("data/data_inventory.csv")
-bad_value = "-9999"
-with open(inventory_path, newline="") as f:
-    rows = list(csv.reader(f))
-n_replaced = 0
-for row in rows:
-    for j, value in enumerate(row):
-        if value.strip() == bad_value:
-            row[j] = ""
-            n_replaced += 1
-with open(inventory_path, "w", newline="") as f:
-    csv.writer(f, lineterminator="\n").writerows(rows)
-print(f"Replaced {n_replaced} {bad_value} values with empty values in {inventory_path}.")
+def get_pt_info(subj_id: int, scan_type: str) -> dict:
+    '''
+        get the path to the .pt file for a given subject id and scan type
 
-# now to save ids we want to flag for specific circumstances
-# scan types for each subject
-ax_ids = process_files("axial")
-sag_ids = process_files("sagittal")
-cor_ids = process_files("coronal")
+        @param subj_id : subject id
+        @param scan_type : the orientation of the scan (either 'axial', 'sagittal', or 'coronal')
+
+        @return path : path to the .pt file if it exists, else None
+    '''
+    scan_dir = Path(f"{proj_dir}/data/scans/mri_{scan_type}")
+    names = [p.name for p in scan_dir.iterdir() if p.is_file() and p.suffix == ".pt"]
+    file = get_scan_file(subj_id, names)
+    if file is not None:
+        return {"path": str(join(scan_dir, file)), "scan_id": Path(file).stem.split("_")[-1]}
+    return {"path": None, "scan_id": None}
+
+
+# get file paths
+ax_paths = [get_pt_info(subj_id, "axial") for subj_id in data["SUB_ID"]]
+sag_paths = [get_pt_info(subj_id, "sagittal") for subj_id in data["SUB_ID"]]
+cor_paths = [get_pt_info(subj_id, "coronal") for subj_id in data["SUB_ID"]]
+
+# get scan types for each subject
+ax_matter = process_files("axial")
+sag_matter = process_files("sagittal")
+cor_matter = process_files("coronal")
 
 # get aq outliers
 aq_border = 19
@@ -108,22 +138,35 @@ aq_outliers = pd.concat([
 print("Marked AQ_TOTAL outliers.")
 
 # get subjects with unclear diagnoses
-unclear_diag = unprocessed_data[(unprocessed_data["DSM_IV_TR"] >= 3)]
+unclear_diag = data[(data["DSM_IV_TR"] >= 3)]
 print("Marked those with an unclear diagnosis.")
 
-# save df of boolean flags and grey/white matter tuples for each subject
-csv_file = "data/subject_flags.csv"
+# save df of all important information for each subject
 print(f"Saving to CSV file {csv_file}")
-flags = pd.DataFrame({"SUB_ID": unprocessed_data["SUB_ID"]})
-flags["HAS_AXIAL"] = flags["SUB_ID"].isin(ax_ids["id"])
-flags["HAS_SAGITTAL"] = flags["SUB_ID"].isin(sag_ids["id"])
-flags["HAS_CORONAL"] = flags["SUB_ID"].isin(cor_ids["id"])
-flags["AQ_OUTLIER"] = flags["SUB_ID"].isin(aq_outliers["SUB_ID"])
-flags["UNCLEAR_DIAG"] = flags["SUB_ID"].isin(unclear_diag["SUB_ID"])
-flags["AXIAL_GREY_MATTER"] = flags["SUB_ID"].map(dict(zip(ax_ids["id"], ax_ids["grey"])))
-flags["AXIAL_WHITE_MATTER"] = flags["SUB_ID"].map(dict(zip(ax_ids["id"], ax_ids["white"])))
-flags["SAGITTAL_GREY_MATTER"] = flags["SUB_ID"].map(dict(zip(sag_ids["id"], sag_ids["grey"])))
-flags["SAGITTAL_WHITE_MATTER"] = flags["SUB_ID"].map(dict(zip(sag_ids["id"], sag_ids["white"])))
-flags["CORONAL_GREY_MATTER"] = flags["SUB_ID"].map(dict(zip(cor_ids["id"], cor_ids["grey"])))
-flags["CORONAL_WHITE_MATTER"] = flags["SUB_ID"].map(dict(zip(cor_ids["id"], cor_ids["white"])))
-flags.to_csv(csv_file, index=False)
+manifest = pd.DataFrame(
+    {
+        "sub_id": data["SUB_ID"],
+        "site": data["SITE_ID"],
+        "label": data["DX_GROUP"].map({1: 1, 2: 0}),  # 1 = autism, 0 = control
+        "age": data["AGE_AT_SCAN"],
+        "sex": data["SEX"],
+        "aq_outlier": data["SUB_ID"].isin(aq_outliers["SUB_ID"]),
+        "unclear_diag": data["SUB_ID"].isin(unclear_diag["SUB_ID"]),
+
+        "axial_scan_id": [p["scan_id"] for p in ax_paths],
+        "axial_pt_path": [p["path"] for p in ax_paths],
+        "axial_grey": ax_matter["grey"],
+        "axial_white": ax_matter["white"],  
+
+        "sagittal_scan_id": [p["scan_id"] for p in sag_paths],
+        "sagittal_pt_path": [p["path"] for p in sag_paths],
+        "sagittal_grey": sag_matter["grey"],
+        "sagittal_white": sag_matter["white"],
+        
+        "coronal_scan_id": [p["scan_id"] for p in cor_paths],
+        "coronal_pt_path": [p["path"] for p in cor_paths],
+        "coronal_grey": cor_matter["grey"],
+        "coronal_white": cor_matter["white"]
+    }
+)
+manifest.to_csv(csv_file, index=False)

@@ -20,7 +20,6 @@
 
 
 ## Deliverables
-### Jess:
 - [x] notebooks/eda.ipynb:
     - Visualizations and descriptive stats.
     - Missingness analysis.
@@ -32,16 +31,14 @@
 
 - [x] dataframe for demographics
 
-### Doyee:
-- [ ] notebooks/pipeline_demo.ipynb:
+- [x] notebooks/pipeline_demo.ipynb:
     - Demonstrates the pipeline fitting/transforming data.
 
-### Both:
-- [ ] (WIP) notebooks/feature_selection.ipynb:
+- [x] notebooks/feature_selection.ipynb:
     - Shows feature elimination decisions (variance threshold, correlation pruning, leakage checks).
     - Logs results in a table (results/feature_selection.csv).
 
-- [ ] src/features/transformers.py:
+- [x] src/features/transformers.py:
     - Custom transformers implementing engineered features (e.g., lag features, ratios, domain-driven encodings).
 
 - [x] src/features/preprocessing.py:
@@ -50,6 +47,6 @@
 - [ ] Updated schema (schema.json or schema.yaml):
     - Defines available features, their types, and any transformations applied.
 
-- [ ] (Optional) Tests in tests/test_pipeline.py:
-    - Verify engineered features are generated correctly.
-    - Ensure pipeline respects train/test splits (no future leakage).
+- [ ] ~~(Optional) Tests in tests/test_pipeline.py:~~
+    - ~~Verify engineered features are generated correctly.~~
+    - ~~Ensure pipeline respects train/test splits (no future leakage).~~
