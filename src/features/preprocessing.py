@@ -16,13 +16,13 @@ from os.path import join
 
 
 # file locations
-proj_dir = os.environ.get("PROJECT_DIR")
-inventory_path = Path(f"{proj_dir}/data/data_inventory.csv")
-csv_file = f"{proj_dir}/data/manifest.csv"
+PROJECT_DIR = os.environ.get("PROJECT_DIR")
+INVENTORY_PATH = Path(f"{PROJECT_DIR}/data/data_inventory.csv")
+CSV_FILE = f"{PROJECT_DIR}/data/manifest.csv"
 
 # remove incorrect values in patient data csv
 bad_value = "-9999"
-with open(inventory_path, newline="") as f:
+with open(INVENTORY_PATH, newline="") as f:
     rows = list(csv.reader(f))
 n_replaced = 0
 for row in rows:
@@ -30,12 +30,12 @@ for row in rows:
         if value.strip() == bad_value:
             row[j] = ""
             n_replaced += 1
-with open(inventory_path, "w", newline="") as f:
+with open(INVENTORY_PATH, "w", newline="") as f:
     csv.writer(f, lineterminator="\n").writerows(rows)
-print(f"Replaced {n_replaced} {bad_value} values with empty values in {inventory_path}.")
+print(f"Replaced {n_replaced} {bad_value} values with empty values in {INVENTORY_PATH}.")
 
 # get data inventory and split into control and autism groups
-data = pd.read_csv(inventory_path)
+data = pd.read_csv(INVENTORY_PATH)
 control = data[data["DX_GROUP"] == 2]
 autism = data[data["DX_GROUP"] == 1]
 
@@ -85,7 +85,7 @@ def process_files(scan_type: str) -> dict:
         @return dictionary of ids and their grey matter and white matter tuples from find_matter
     '''
     print(f"Processing {scan_type} files. This may take a while...")
-    scan_dir = Path(f"{proj_dir}/data/scans/mri_{scan_type}")
+    scan_dir = Path(f"{PROJECT_DIR}/data/scans/mri_{scan_type}")
     all_ids = data["SUB_ID"].unique()
     names = [p.name for p in scan_dir.iterdir() if p.is_file() and p.suffix == ".pt"]
     grey = []
@@ -111,7 +111,7 @@ def get_pt_info(subj_id: int, scan_type: str) -> dict:
 
         @return path : path to the .pt file if it exists, else None
     '''
-    scan_dir = Path(f"{proj_dir}/data/scans/mri_{scan_type}")
+    scan_dir = Path(f"{PROJECT_DIR}/data/scans/mri_{scan_type}")
     names = [p.name for p in scan_dir.iterdir() if p.is_file() and p.suffix == ".pt"]
     file = get_scan_file(subj_id, names)
     if file is not None:
@@ -142,7 +142,7 @@ unclear_diag = data[(data["DSM_IV_TR"] >= 3)]
 print("Marked those with an unclear diagnosis.")
 
 # save df of all important information for each subject
-print(f"Saving to CSV file {csv_file}")
+print(f"Saving to CSV file {CSV_FILE}")
 manifest = pd.DataFrame(
     {
         "sub_id": data["SUB_ID"],
@@ -169,4 +169,11 @@ manifest = pd.DataFrame(
         "coronal_white": cor_matter["white"]
     }
 )
-manifest.to_csv(csv_file, index=False)
+
+# remove subjects with no scans
+manifest = manifest.dropna(
+    subset=["axial_scan_id", "sagittal_scan_id", "coronal_scan_id"], how="all"
+)  
+
+# save to csv
+manifest.to_csv(CSV_FILE, index=False)
