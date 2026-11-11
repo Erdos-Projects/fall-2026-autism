@@ -21,9 +21,9 @@ args = ap.parse_args()
 PROJECT_DIR = os.environ.get("PROJECT_DIR")
 INVENTORY_PATH = Path(f"{PROJECT_DIR}/data/data_inventory.csv")
 CLEAN_INVENTORY_PATH = Path(f"{PROJECT_DIR}/data/data_inventory_cleaned.csv")
-CSV_FILE = f"{PROJECT_DIR}/data/manifest.csv"
 ORIENTATION = args.orientation
 print(f"Using {ORIENTATION} to build manifest.")
+CSV_FILE = f"{PROJECT_DIR}/data/manifest_{ORIENTATION}.csv"
 
 # remove incorrect values in patient data csv
 bad_value = "-9999"

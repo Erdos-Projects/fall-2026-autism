@@ -54,8 +54,11 @@ WEIGHT_DECAY = 1e-2       # mild penalty on large weights; helps against overfit
 PATIENCE = 8              # stop if validation AUC hasn't improved for this many epochs
 
 PROJECT_DIR = os.environ.get("PROJECT_DIR") 
-MANIFEST_IN = Path(f"{PROJECT_DIR}/data/manifest.csv")
-RUN_DIR = Path(f"{PROJECT_DIR}/data/{ORIENTATION}_{SEED}") # directory all the output will be saved
+MANIFEST_IN = Path(f"{PROJECT_DIR}/data/manifest_{ORIENTATION}.csv")
+if not MANIFEST_IN.exists():
+    raise ValueError(f"Manifest file does not exist! Run run.sh again with flag -m to make the manifest.")
+RUN_DIR = Path(f"{PROJECT_DIR}/results/{ORIENTATION}_{SEED}") # directory all the output will be saved
+RUN_DIR.mkdir(parents=True, exist_ok=True)
 MANIFEST_SPLIT = Path(f"{RUN_DIR}/manifest_split.csv")
 CHECKPOINT = Path(f"{RUN_DIR}/best_model.pt")
 
