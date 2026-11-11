@@ -20,6 +20,7 @@ args = ap.parse_args()
 # file locations
 PROJECT_DIR = os.environ.get("PROJECT_DIR")
 INVENTORY_PATH = Path(f"{PROJECT_DIR}/data/data_inventory.csv")
+CLEAN_INVENTORY_PATH = Path(f"{PROJECT_DIR}/data/data_inventory_cleaned.csv")
 CSV_FILE = f"{PROJECT_DIR}/data/manifest.csv"
 ORIENTATION = args.orientation
 print(f"Using {ORIENTATION} to build manifest.")
@@ -34,12 +35,12 @@ for row in rows:
         if value.strip() == bad_value:
             row[j] = ""
             n_replaced += 1
-with open(INVENTORY_PATH, "w", newline="") as f:
+with open(CLEAN_INVENTORY_PATH, "w", newline="") as f:
     csv.writer(f, lineterminator="\n").writerows(rows)
 print(f"Replaced {n_replaced} {bad_value} values with empty values in {INVENTORY_PATH}.")
 
 # get data inventory and split into control and autism groups
-data = pd.read_csv(INVENTORY_PATH)
+data = pd.read_csv(CLEAN_INVENTORY_PATH)
 control = data[data["DX_GROUP"] == 2]
 autism = data[data["DX_GROUP"] == 1]
 

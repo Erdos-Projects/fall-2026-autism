@@ -29,6 +29,7 @@ Key ideas, in plain words:
 """
 
 import argparse
+import os
 from pathlib import Path
 
 import numpy as np
@@ -42,7 +43,7 @@ from torch.utils.data import DataLoader, Dataset
 # --------------------------------------------------------------------------- #
 # Settings
 # --------------------------------------------------------------------------- #
-PROJECT_DIR = Path(__file__).resolve().parents[1]  # repo root, independent of the working directory
+PROJECT_DIR = os.environ.get("PROJECT_DIR")  # repo root, independent of the working directory
 MANIFEST_IN = Path(f"{PROJECT_DIR}/data/manifest.csv")
 MANIFEST_SPLIT = Path(f"{PROJECT_DIR}/data/manifest_split.csv")
 CHECKPOINT = Path(f"{PROJECT_DIR}/results/best_model.pt")
