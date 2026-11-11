@@ -7,18 +7,22 @@
 import csv
 import pandas as pd
 from pathlib import Path
-import torch
-import scipy.ndimage as ndi
-from scipy.signal import find_peaks
-import numpy as np
 import os
 from os.path import join
+import argparse
 
+ap = argparse.ArgumentParser(
+    description="Make manifest ABIDE data for autism vs. control classification.")
+ap.add_argument("--orientation", "-o", type=str, default="sagittal", choices=["axial", "sagittal", "coronal"],
+                help="which scan orientation to use (default: axial)")
+args = ap.parse_args()
 
 # file locations
 PROJECT_DIR = os.environ.get("PROJECT_DIR")
 INVENTORY_PATH = Path(f"{PROJECT_DIR}/data/data_inventory.csv")
 CSV_FILE = f"{PROJECT_DIR}/data/manifest.csv"
+ORIENTATION = args.orientation
+print(f"Using {ORIENTATION} to build manifest.")
 
 # remove incorrect values in patient data csv
 bad_value = "-9999"
@@ -40,7 +44,8 @@ control = data[data["DX_GROUP"] == 2]
 autism = data[data["DX_GROUP"] == 1]
 
 
-def get_scan_file(subj_id: int, names: list) -> str:
+# UDFs
+def get_scan_file(subj_id: int, names: list) -> str | None:
     '''
         find whether the scan file exists for the subject id
 
@@ -52,54 +57,7 @@ def get_scan_file(subj_id: int, names: list) -> str:
     for name in names:
         if str(subj_id) in name.split("_"):
             return name  
-
-
-def find_matter(file: str) -> dict[tuple]:
-    ''' 
-        look at the image file to find the white and grey matter indices
-
-        @param file : image file name
-
-        @return dictionary of tuples for (min, max) values for 'grey' and 'white' matter
-    '''
-    sigma = 1
-    brain_vol = torch.load(file)
-    brain_vol_data = brain_vol["vol"].float().numpy()
-    filt = ndi.gaussian_filter(brain_vol_data, sigma=sigma)
-    filt_hist = ndi.histogram(filt, min=0, max=np.max(filt), bins=50)
-    gr = np.gradient(filt_hist)
-    idx1, _ = find_peaks(gr, distance=1)
-    idx2, _ = find_peaks(-gr, distance=1)
-    idx = np.sort(np.concatenate([idx1[:4], idx2[:4]]))
-    if len(idx) < 5:
-        return {'grey' : None, 'white' : None}
-    return {'grey' : (int(idx[1]), int(idx[2]-1)), 'white' : (int(idx[2]), int(idx[4]))}
-
-
-def process_files(scan_type: str) -> dict:
-    '''
-        loop through subject IDs to process the .pt files
-
-        @param scan_type : the orientation of the scan (either 'axial', 'sagittal', or 'coronal')
-
-        @return dictionary of ids and their grey matter and white matter tuples from find_matter
-    '''
-    print(f"Processing {scan_type} files. This may take a while...")
-    scan_dir = Path(f"{PROJECT_DIR}/data/scans/mri_{scan_type}")
-    all_ids = data["SUB_ID"].unique()
-    names = [p.name for p in scan_dir.iterdir() if p.is_file() and p.suffix == ".pt"]
-    grey = []
-    white = []
-    for id in all_ids:
-        file = get_scan_file(id, names)
-        if file is not None:
-            matter = find_matter(join(scan_dir, file))
-            grey.append(matter["grey"])
-            white.append(matter["white"])
-        else:
-            grey.append(None)
-            white.append(None)
-    return {"grey" : grey, "white" : white}
+    return None
 
 
 def get_pt_info(subj_id: int, scan_type: str) -> dict:
@@ -114,20 +72,13 @@ def get_pt_info(subj_id: int, scan_type: str) -> dict:
     scan_dir = Path(f"{PROJECT_DIR}/data/scans/mri_{scan_type}")
     names = [p.name for p in scan_dir.iterdir() if p.is_file() and p.suffix == ".pt"]
     file = get_scan_file(subj_id, names)
-    if file is not None:
+    if file:
         return {"path": str(join(scan_dir, file)), "scan_id": Path(file).stem.split("_")[-1]}
     return {"path": None, "scan_id": None}
 
 
 # get file paths
-ax_paths = [get_pt_info(subj_id, "axial") for subj_id in data["SUB_ID"]]
-sag_paths = [get_pt_info(subj_id, "sagittal") for subj_id in data["SUB_ID"]]
-cor_paths = [get_pt_info(subj_id, "coronal") for subj_id in data["SUB_ID"]]
-
-# get scan types for each subject
-ax_matter = process_files("axial")
-sag_matter = process_files("sagittal")
-cor_matter = process_files("coronal")
+scan_info = [get_pt_info(subj_id, ORIENTATION) for subj_id in data["SUB_ID"]]
 
 # get aq outliers
 aq_border = 19
@@ -152,27 +103,14 @@ manifest = pd.DataFrame(
         "sex": data["SEX"],
         "aq_outlier": data["SUB_ID"].isin(aq_outliers["SUB_ID"]),
         "unclear_diag": data["SUB_ID"].isin(unclear_diag["SUB_ID"]),
-
-        "axial_scan_id": [p["scan_id"] for p in ax_paths],
-        "axial_pt_path": [p["path"] for p in ax_paths],
-        "axial_grey": ax_matter["grey"],
-        "axial_white": ax_matter["white"],  
-
-        "sagittal_scan_id": [p["scan_id"] for p in sag_paths],
-        "sagittal_pt_path": [p["path"] for p in sag_paths],
-        "sagittal_grey": sag_matter["grey"],
-        "sagittal_white": sag_matter["white"],
-        
-        "coronal_scan_id": [p["scan_id"] for p in cor_paths],
-        "coronal_pt_path": [p["path"] for p in cor_paths],
-        "coronal_grey": cor_matter["grey"],
-        "coronal_white": cor_matter["white"]
+        "scan_id": [p["scan_id"] for p in scan_info],
+        "pt_path": [p["path"] for p in scan_info]
     }
 )
 
 # remove subjects with no scans
 manifest = manifest.dropna(
-    subset=["axial_scan_id", "sagittal_scan_id", "coronal_scan_id"], how="all"
+    subset=["scan_id"], how="all"
 )  
 
 # save to csv
