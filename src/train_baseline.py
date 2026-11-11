@@ -43,12 +43,8 @@ from torch.utils.data import DataLoader, Dataset
 # --------------------------------------------------------------------------- #
 # Settings
 # --------------------------------------------------------------------------- #
-PROJECT_DIR = os.environ.get("PROJECT_DIR")  # repo root, independent of the working directory
-MANIFEST_IN = Path(f"{PROJECT_DIR}/data/manifest.csv")
-MANIFEST_SPLIT = Path(f"{PROJECT_DIR}/data/manifest_split.csv")
-CHECKPOINT = Path(f"{PROJECT_DIR}/results/best_model.pt")
-
-SEED = 42
+SEED = int(os.environ.get("SEED", 42))  # random seed for reproducibility
+ORIENTATION = os.environ.get("ORIENTATION", "sagittal")  # default orientation
 VAL_FRAC = 0.15
 TEST_FRAC = 0.15
 MIN_STRATUM_SIZE = 6      # site/diagnosis groups smaller than this are merged when splitting
@@ -56,6 +52,12 @@ MIN_STRATUM_SIZE = 6      # site/diagnosis groups smaller than this are merged w
 LEARNING_RATE = 3e-4      # how big each weight update is; too high = unstable, too low = slow
 WEIGHT_DECAY = 1e-2       # mild penalty on large weights; helps against overfitting
 PATIENCE = 8              # stop if validation AUC hasn't improved for this many epochs
+
+PROJECT_DIR = os.environ.get("PROJECT_DIR") 
+MANIFEST_IN = Path(f"{PROJECT_DIR}/data/manifest.csv")
+RUN_DIR = Path(f"{PROJECT_DIR}/data/{ORIENTATION}_{SEED}") # directory all the output will be saved
+MANIFEST_SPLIT = Path(f"{RUN_DIR}/manifest_split.csv")
+CHECKPOINT = Path(f"{RUN_DIR}/best_model.pt")
 
 
 def set_seed(seed):
@@ -276,7 +278,7 @@ def main():
                 print(f"no improvement for {PATIENCE} epochs; stopping early")
                 break
 
-    pd.DataFrame(history).to_csv(f"{PROJECT_DIR}/results/training_log.csv", index=False)   # used by the inspection notebook
+    pd.DataFrame(history).to_csv(f"{RUN_DIR}/training_log.csv", index=False)   # used by the inspection notebook
 
     # ---- final test evaluation (done once, with the best-validation weights) ----
     model.load_state_dict(torch.load(CHECKPOINT, map_location=device))

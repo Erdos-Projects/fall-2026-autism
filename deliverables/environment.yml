@@ -9,3 +9,7 @@ dependencies:
   - python = 3.12
   - numpy
   - pytorch
+  - scipy
+  - nibabel
+  - nilearn
+  - scikit-learn

@@ -31,7 +31,6 @@ while getopts "eo:mts:h" flag; do
    ;;
    s) # Handle the -s flag
    export SEED=$OPTARG
-   echo "Seed set to $SEED"
    ;;
    h) # Handle the -h flag
    echo "Usage: $0 [-e] [-o orientation] [-m] [-t] [-s seed] [-h]"
@@ -51,11 +50,12 @@ while getopts "eo:mts:h" flag; do
  esac
 done
 
-echo "Orientation set to $ORIENTATION"
+echo "Orientation set to '$ORIENTATION'"
+echo "Seed set to '$SEED'"
 
 if [ -z "$USE_SMOKE" ]; then
   echo "Doing a full run..."
-  python3 src/train_baseline.py --seed $SEED; else
+  python3 src/train_baseline.py; else
   echo "Doing a test run..."
-  python3 src/train_baseline.py --smoke --seed $SEED;
+  python3 src/train_baseline.py --smoke;
 fi
