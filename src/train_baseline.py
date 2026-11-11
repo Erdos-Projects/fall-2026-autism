@@ -40,11 +40,11 @@ from sklearn.metrics import accuracy_score, roc_auc_score
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 
+from utils import check_project_dir, parse_target_size, PROJECT_DIR
+
 # --------------------------------------------------------------------------- #
 # Settings
 # --------------------------------------------------------------------------- #
-SEED = int(os.environ.get("SEED", 42))  # random seed for reproducibility
-ORIENTATION = os.environ.get("ORIENTATION", "sagittal")  # default orientation
 VAL_FRAC = 0.15
 TEST_FRAC = 0.15
 MIN_STRATUM_SIZE = 6      # site/diagnosis groups smaller than this are merged when splitting
@@ -52,15 +52,6 @@ MIN_STRATUM_SIZE = 6      # site/diagnosis groups smaller than this are merged w
 LEARNING_RATE = 3e-4      # how big each weight update is; too high = unstable, too low = slow
 WEIGHT_DECAY = 1e-2       # mild penalty on large weights; helps against overfitting
 PATIENCE = 8              # stop if validation AUC hasn't improved for this many epochs
-
-PROJECT_DIR = os.environ.get("PROJECT_DIR") 
-MANIFEST_IN = Path(f"{PROJECT_DIR}/data/manifest_{ORIENTATION}.csv")
-if not MANIFEST_IN.exists():
-    raise ValueError(f"Manifest file does not exist! Run run.sh again with flag -m to make the manifest.")
-RUN_DIR = Path(f"{PROJECT_DIR}/results/{ORIENTATION}_{SEED}") # directory all the output will be saved
-RUN_DIR.mkdir(parents=True, exist_ok=True)
-MANIFEST_SPLIT = Path(f"{RUN_DIR}/manifest_split.csv")
-CHECKPOINT = Path(f"{RUN_DIR}/best_model.pt")
 
 
 def set_seed(seed):
@@ -73,7 +64,7 @@ def set_seed(seed):
 # --------------------------------------------------------------------------- #
 # 1. Subject-level split
 # --------------------------------------------------------------------------- #
-def make_split(manifest):
+def make_split(manifest, seed):
     """
     Add a 'split' column. We split SUBJECTS (not scans), stratified on diagnosis and site so
     each set has a similar mix. If a site/diagnosis group is too small to stratify, we merge
@@ -89,7 +80,7 @@ def make_split(manifest):
         for col in (strata, subj["label"]):                 # try site+label, then label only
             try:
                 return train_test_split(idx, test_size=test_size,
-                                        stratify=col.iloc[idx], random_state=SEED)
+                                        stratify=col.iloc[idx], random_state=seed)
             except ValueError:
                 print("  stratification failed; trying a coarser grouping")
         raise ValueError("could not stratify the split")
@@ -209,21 +200,49 @@ def main():
     ap.add_argument("--epochs", type=int, default=40)
     ap.add_argument("--batch-size", type=int, default=4)
     ap.add_argument("--smoke", action="store_true", help="tiny run to check the pipeline works")
-    ap.add_argument("--seed", type=int, default=SEED, help="random seed for reproducibility")
+    ap.add_argument("--seed", type=int, default=42, help="random seed for reproducibility")
+    ap.add_argument("--o", "--orientation", default="sagittal",
+                    help="set scan orientation")
+    ap.add_argument("--shape", default="(96,96,96)",
+                    help="set image shape (format is (int, int, int))")
     args = ap.parse_args()
+
+    target_shape = parse_target_size(args.shape)
 
     set_seed(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"device: {device}")
 
+    if args.smoke:
+        RUN_DIR = Path(
+                    f"{PROJECT_DIR}/data/smoke")
+    else:
+        RUN_DIR = Path(
+            f"{PROJECT_DIR}/results/{args.o}/{target_shape[0]}_{target_shape[1]}_{target_shape[2]}/{args.seed}")
+        
+    MANIFEST_IN = Path(f"{PROJECT_DIR}/data/manifest_{args.o}.csv")
+    MANIFEST_SPLIT = Path(f"{RUN_DIR}/manifest_split.csv")
+    CHECKPOINT = Path(f"{RUN_DIR}/best_model.pt")
+
     # ---- data and split ----
+    check_project_dir(PROJECT_DIR)
+    if not MANIFEST_IN.exists():
+        raise ValueError(f"Manifest file does not exist! Run run.sh again with flag -m to make the manifest.")
+    RUN_DIR.mkdir(parents=True, exist_ok=True)
     manifest = pd.read_csv(MANIFEST_IN)
     if MANIFEST_SPLIT.exists():
-        manifest = pd.read_csv(MANIFEST_SPLIT)               # reuse the saved split
+        print(f"Reusing split {MANIFEST_SPLIT}")
+        # merge MANIFEST_IN and MANIFEST_SPLIT & make sure the pt_path exists
+        saved = pd.read_csv(MANIFEST_SPLIT)[["sub_id", "split"]].drop_duplicates("sub_id")
+        manifest = manifest.merge(saved, on="sub_id", how="left")
+        if manifest["split"].isna().any():
+            raise ValueError(f"Some subjects in {MANIFEST_IN} are missing from {MANIFEST_SPLIT}. "
+                             f"Delete {MANIFEST_SPLIT} to re-split.")
+        manifest.to_csv(MANIFEST_SPLIT, index=False)         # refresh the saved copy
     else:
-        manifest = make_split(manifest)
+        print(f"Spliting test/val/train groups and saving in {MANIFEST_SPLIT}")
+        manifest = make_split(manifest, args.seed)
         manifest.to_csv(MANIFEST_SPLIT, index=False)
-        print(f"saved split to {MANIFEST_SPLIT}")
 
     if args.smoke:                                           # keep a handful of scans per split
         manifest = manifest.groupby("split", group_keys=False).head(8)
