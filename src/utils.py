@@ -86,13 +86,33 @@ def save_run_settings(out_dir: str | Path, pt_dir: str | Path, seed: int) -> Pat
 
         @return settings_path : path of the written JSON file
     '''
-    pt_settings_path = Path(pt_dir) / "settings.json"
+    pt_settings_path = PROJECT_DIR / Path(pt_dir) / "settings.json"
     if not pt_settings_path.exists():
         raise ValueError(f"{pt_settings_path} does not exist! Run run.sh again with flag -e to remake the .pt files.")
     settings = json.loads(pt_settings_path.read_text())
     settings["preprocessing_date"] = settings.pop("date")
     settings["seed"] = seed
     settings["date"] = datetime.now().isoformat(timespec="seconds")
-    settings_path = Path(out_dir) / "settings.json"
+    settings_path = PROJECT_DIR / Path(out_dir) / "settings.json"
     settings_path.write_text(json.dumps(settings, indent=4))
     return settings_path
+
+
+def run_dir(orientation: str, target_shape: tuple[int, int, int], seed: int,
+            smoke: bool = False, project_dir: str | Path | None = PROJECT_DIR) -> Path:
+    '''
+        build the results folder of a training run, where best_model.pt, manifest_split.csv,
+        training_log.csv and settings.json are saved
+
+        @param orientation : the orientation of the scan (either 'axial', 'sagittal', or 'coronal')
+        @param target_shape : tuple of 3 integers the scans were resized to
+        @param seed : random seed of the run
+        @param smoke : True for a smoke test run (saved in data/smoke instead)
+        @param project_dir : path to the repo; defaults to the PROJECT_DIR environment variable
+
+        @return run_dir : path of the results folder
+    '''
+    check_project_dir(project_dir)
+    if smoke:
+        return Path(project_dir) / "data" / "smoke"
+    return Path(project_dir) / "results" / orientation / "_".join(map(str, target_shape)) / str(seed)

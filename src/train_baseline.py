@@ -5,8 +5,7 @@ Author: Doyee Byun
 Editor: Jess Miears
 
 Input : data/manifest.csv written by preprocessing.py
-        (columns: sub_id,site,label,age,sex,aq_outlier,unclear_diag,
-        scan_id,pt_path,img shape)
+        (columns: sub_id,site,label,age,sex,aq_outlier,unclear_diag,scan_id,pt_path,img shape)
 Output (put in folder results/{orientation}/{target_size}/{seed}):
         best_model.pt            weights from the epoch with the best validation AUC
         settings.json            settings for the run: the preprocessing settings saved next to
@@ -38,18 +37,14 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from sklearn.metrics import accuracy_score, roc_auc_score
-from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 
-from utils import check_project_dir, parse_target_size, save_run_settings, PROJECT_DIR
+from utils import check_project_dir, parse_target_size, run_dir, save_run_settings, PROJECT_DIR
+from splits.make_split import make_split
 
 # --------------------------------------------------------------------------- #
 # Settings
 # --------------------------------------------------------------------------- #
-VAL_FRAC = 0.15
-TEST_FRAC = 0.15
-MIN_STRATUM_SIZE = 6      # site/diagnosis groups smaller than this are merged when splitting
-
 LEARNING_RATE = 3e-4      # how big each weight update is; too high = unstable, too low = slow
 WEIGHT_DECAY = 1e-2       # mild penalty on large weights; helps against overfitting
 PATIENCE = 8              # stop if validation AUC hasn't improved for this many epochs
@@ -63,44 +58,7 @@ def set_seed(seed):
 
 
 # --------------------------------------------------------------------------- #
-# 1. Subject-level split
-# --------------------------------------------------------------------------- #
-def make_split(manifest, seed):
-    """
-    Add a 'split' column. We split SUBJECTS (not scans), stratified on diagnosis and site so
-    each set has a similar mix. If a site/diagnosis group is too small to stratify, we merge
-    small groups, and if that still fails we stratify on diagnosis only.
-    """
-    subj = manifest.drop_duplicates("sub_id")[["sub_id", "site", "label"]].reset_index(drop=True)
-
-    strata = subj["label"].astype(str) + "_" + subj["site"].astype(str)
-    sizes = strata.map(strata.value_counts())
-    strata = strata.where(sizes >= MIN_STRATUM_SIZE, subj["label"].astype(str) + "_rare")
-
-    def stratified(idx, test_size):
-        for col in (strata, subj["label"]):                 # try site+label, then label only
-            try:
-                return train_test_split(idx, test_size=test_size,
-                                        stratify=col.iloc[idx], random_state=seed)
-            except ValueError:
-                print("  stratification failed; trying a coarser grouping")
-        raise ValueError("could not stratify the split")
-
-    idx = np.arange(len(subj))
-    trainval_idx, test_idx = stratified(idx, TEST_FRAC)
-    train_idx, val_idx = stratified(trainval_idx, VAL_FRAC / (1 - TEST_FRAC))
-
-    subj["split"] = "train"
-    subj.loc[val_idx, "split"] = "val"
-    subj.loc[test_idx, "split"] = "test"
-
-    out = manifest.merge(subj[["sub_id", "split"]], on="sub_id", how="left")
-    assert out.groupby("sub_id")["split"].nunique().max() == 1, "a subject ended up in two splits"
-    return out
-
-
-# --------------------------------------------------------------------------- #
-# 2. Data loading
+# Data loading
 # --------------------------------------------------------------------------- #
 def augment(vol):
     """
@@ -136,7 +94,7 @@ class ScanDataset(Dataset):
 
 
 # --------------------------------------------------------------------------- #
-# 3. The model
+# The model
 # --------------------------------------------------------------------------- #
 def conv_block(c_in, c_out):
     """3x3x3 convolution -> batch norm -> ReLU -> halve the size with max pooling."""
@@ -167,7 +125,7 @@ class Baseline3DCNN(nn.Module):
 
 
 # --------------------------------------------------------------------------- #
-# 4. Evaluation helpers
+# Evaluation helpers
 # --------------------------------------------------------------------------- #
 @torch.no_grad()
 def predict(model, df, batch_size, device):
@@ -194,7 +152,7 @@ def safe_auc(labels, probs):
 
 
 # --------------------------------------------------------------------------- #
-# 5. Main
+# Main
 # --------------------------------------------------------------------------- #
 def main():
     ap = argparse.ArgumentParser()
@@ -214,13 +172,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"device: {device}")
 
-    if args.smoke:
-        RUN_DIR = Path(
-                    f"{PROJECT_DIR}/data/smoke")
-    else:
-        RUN_DIR = Path(
-            f"{PROJECT_DIR}/results/{args.o}/{target_shape[0]}_{target_shape[1]}_{target_shape[2]}/{args.seed}")
-        
+    RUN_DIR = run_dir(args.o, target_shape, args.seed, smoke=args.smoke)
     MANIFEST_IN = Path(f"{PROJECT_DIR}/data/manifest_{args.o}.csv")
     MANIFEST_SPLIT = Path(f"{RUN_DIR}/manifest_split.csv")
     CHECKPOINT = Path(f"{RUN_DIR}/best_model.pt")
@@ -321,8 +273,11 @@ def main():
         site_preds = (g["prob"] >= 0.5).astype(int)
         print(f"  {site:12s} n={len(g):3d}  AUC={safe_auc(g['label'], g['prob']):.3f}  "
               f"acc={accuracy_score(g['label'], site_preds):.3f}")
+    
+    pred_df = pd.merge(manifest, test_subj, on="sub_id")
+    pred_df.to_csv(f"{RUN_DIR}/manifest_pred.csv", index=False)
 
-    # ---- evaluation-only group (subjects never trained on, see resplit_training.make_split) ----
+    # ---- evaluation-only group (subjects never trained on, see splits.make_split) ----
     holdout_df = manifest[manifest["split"] == "holdout"]
     if len(holdout_df):
         hold_subj = per_subject(predict(model, holdout_df, args.batch_size, device))

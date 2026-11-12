@@ -8,7 +8,6 @@
 import csv
 import pandas as pd
 from pathlib import Path
-from os.path import join
 import sys
 import argparse
 
@@ -85,7 +84,7 @@ def get_pt_info(subj_id: int, scan_type: str, target_shape: tuple[int]) -> dict:
     names = [p.name for p in scan_dir.iterdir() if p.is_file() and p.suffix == ".pt"]
     file = get_scan_file(subj_id, names)
     if file:
-        return {"path": str(join(scan_dir, file)), "scan_id": Path(file).stem.split("_")[-1]}
+        return {"path": str(scan_dir.relative_to(PROJECT_DIR) / file), "scan_id": Path(file).stem.split("_")[-1]}
     return {"path": None, "scan_id": None}
 
 
