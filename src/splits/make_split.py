@@ -104,6 +104,6 @@ def make_split(
 
     # inner merge drops scans from subjects that are in neither the split nor the holdout group
     splits = pd.concat([subj[["sub_id", "split", "split_seed"]], held_out], ignore_index=True)
-    out = manifest.drop(columns="split", errors="ignore").merge(splits, on="sub_id", how="inner")
+    out = manifest.drop(columns=["split", "split_seed"], errors="ignore").merge(splits, on="sub_id", how="inner")
     assert out.groupby("sub_id")["split"].nunique().max() == 1, "a subject ended up in two splits"
     return out
