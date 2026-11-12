@@ -16,14 +16,16 @@ import sys
 import argparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # so src/utils.py can be imported
-from utils import check_project_dir, parse_target_size, PROJECT_DIR
+from utils import check_project_dir, parse_target_size, save_pt_settings, PROJECT_DIR
 
 # --------------------------------------------------------------------------- #
 # Settings
 # --------------------------------------------------------------------------- #
-OVERWRITE = False                                 # SET TO True TO REGENERATE .pt FILES THAT ALREADY EXIST
-ZIP_PATH = Path(                                  # CHANGE THIS TO WHERE YOUR ZIP FILE IS LOCATED                                      
-    f"{PROJECT_DIR}/data/scans")                  # note we assume the zip file is saved as "mri_{orientation}.zip"
+CLIP_PERCENTILE = 99.5                  # percentile limiting the brightness of the pixels
+FG_PERCENTILE = (0.2, 99)               # foreground selection percentiles        
+OVERWRITE = False                        # SET TO True TO REGENERATE .pt FILES THAT ALREADY EXIST
+ZIP_PATH = Path(                        # CHANGE THIS TO WHERE YOUR ZIP FILE IS LOCATED                                      
+    f"{PROJECT_DIR}/data/scans")        # note we assume the zip file is saved as "mri_{orientation}.zip"
 
 INVENTORY_PATH = Path(f"{PROJECT_DIR}/data/data_inventory.csv")   
 
@@ -66,11 +68,11 @@ def nii_to_tensor(raw: bytes, name: str, target_shape: tuple[int]) -> torch.Tens
     # per-scan intensity normalization BEFORE the fp16 cast. Raw intensities differ a lot
     # between scanners and can exceed the fp16 maximum (65504), which would turn into inf.
     # The mask is a crude foreground threshold (it includes skull/scalp), not a brain mask.
-    foreground = img_nib > 0.2 * np.percentile(img_nib, 99)
+    foreground = img_nib > FG_PERCENTILE[0] * np.percentile(img_nib, FG_PERCENTILE[1])
     if foreground.sum() < 1000:
         print(f"skipping {name}: foreground mask is nearly empty")
         return None
-    img_nib = np.clip(img_nib, 0, np.percentile(img_nib[foreground], 99.5))  # tame extreme bright voxels
+    img_nib = np.clip(img_nib, 0, np.percentile(img_nib[foreground], CLIP_PERCENTILE))  # tame extreme bright voxels
     img_nib = (img_nib - img_nib[foreground].mean()) / (img_nib[foreground].std() + 1e-6)  # z-score
     img_nib[~foreground] = 0.0
 
@@ -95,13 +97,16 @@ def nii_to_tensor(raw: bytes, name: str, target_shape: tuple[int]) -> torch.Tens
 # --------------------------------------------------------------------------- #
 # File Extraction
 # --------------------------------------------------------------------------- #
-def extract_zip(zip_path: Path, data: pd.DataFrame, remove_set: set[str], target_shape: tuple[int]) -> None:
+def extract_zip(zip_path: Path, data: pd.DataFrame, remove_set: set[str], orientation: str,
+                target_shape: tuple[int]) -> None:
     '''
         extract and convert the MRI files in one zip to .pt files, skipping those belonging to removed subjects
 
         @param zip_path : path to the zip file; the .pt files are saved in a folder with the same name
         @param data : the data inventory
         @param remove_set : subject ids (as strings) to skip
+        @param orientation : the orientation of the scan (either 'axial', 'sagittal', or 'coronal')
+        @param target_shape : tuple of 3 integers to resize the scans to
     '''
     # diagnosis lookup so each saved tensor carries its label (ABIDE: 1 = autism, 2 = control)
     dx_by_sub = data.set_index("SUB_ID")["DX_GROUP"]
@@ -147,6 +152,8 @@ def extract_zip(zip_path: Path, data: pd.DataFrame, remove_set: set[str], target
             # saving the image
             torch.save({"vol": img_tensor, "id": sub_id, "label": label}, save_path)
     print(f"skipped {n_skipped} files from removed subjects in {zip_path}")
+    print(f"Saving preprocessing settings in "
+          f"{save_pt_settings(save_dir, orientation, target_shape, FG_PERCENTILE, CLIP_PERCENTILE)}")
 
 
 # --------------------------------------------------------------------------- #
@@ -173,7 +180,7 @@ def main():
     remove_set = get_remove_set(data)
 
     # extract and convert MRI files in each zip in data/scans to pt files
-    extract_zip(zip_file, data, remove_set, target_shape)
+    extract_zip(zip_file, data, remove_set, args.o, target_shape)
 
 
 if __name__ == "__main__":

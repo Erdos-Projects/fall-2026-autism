@@ -5,12 +5,14 @@ Author: Doyee Byun
 Editor: Jess Miears
 
 Input : data/manifest.csv written by preprocessing.py
-        (columns: sub_id, site, label, age, sex, aq_outlier, unclear_diag, 
-        axial_scan_id, axial_pt_path, axial_grey, axial_white,
-        sagittal_scan_id, sagittal_pt_path, sagittal_grey, sagittal_white,
-        coronal_scan_id, coronal_pt_path, coronal_grey, coronal_white)
-Output: best_model.pt            weights from the epoch with the best validation AUC
-        data/manifest_split.csv  the manifest plus a train/val/test column (saved so every
+        (columns: sub_id,site,label,age,sex,aq_outlier,unclear_diag,
+        scan_id,pt_path,img shape)
+Output (put in folder results/{orientation}/{target_size}/{seed}):
+        best_model.pt            weights from the epoch with the best validation AUC
+        settings.json            settings for the run: the preprocessing settings saved next to
+                                 the .pt files (shape, orientation, normalization percentiles),
+                                 plus the seed and date
+        manifest_split.csv       the manifest plus a train/val/test column (saved so every
                                  later experiment can reuse exactly the same split)
 
 How to run:
@@ -29,7 +31,6 @@ Key ideas, in plain words:
 """
 
 import argparse
-import os
 from pathlib import Path
 
 import numpy as np
@@ -40,7 +41,7 @@ from sklearn.metrics import accuracy_score, roc_auc_score
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 
-from utils import check_project_dir, parse_target_size, PROJECT_DIR
+from utils import check_project_dir, parse_target_size, save_run_settings, PROJECT_DIR
 
 # --------------------------------------------------------------------------- #
 # Settings
@@ -230,6 +231,8 @@ def main():
         raise ValueError(f"Manifest file does not exist! Run run.sh again with flag -m to make the manifest.")
     RUN_DIR.mkdir(parents=True, exist_ok=True)
     manifest = pd.read_csv(MANIFEST_IN)
+    pt_dir = Path(manifest["pt_path"].iloc[0]).parent
+    print(f"Saving run settings in {save_run_settings(RUN_DIR, pt_dir, args.seed)}")
     if MANIFEST_SPLIT.exists():
         print(f"Reusing split {MANIFEST_SPLIT}")
         # merge MANIFEST_IN and MANIFEST_SPLIT & make sure the pt_path exists
